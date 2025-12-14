@@ -27,7 +27,7 @@ export const Toast: React.FC<ToastProps> = ({ message, duration = 3000, onClose 
   return (
     <div
       role="alert"
-      className={`fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-3 rounded-md shadow-lg bg-slate-800 text-white transition-all duration-300 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
+      className={`fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-3 rounded-md shadow-lg bg-slate-800 text-white border-2 border-yellow-400 transition-all duration-300 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
     >
       <Icon type="check" className="w-5 h-5 text-green-400" />
       <p className="text-sm font-medium">{message}</p>

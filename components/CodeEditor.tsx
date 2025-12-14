@@ -11,6 +11,8 @@ interface CodeEditorProps {
   fontSize: string;
   onFormatCode: () => void;
   isFormatLoading: boolean;
+  showToast: (message: string) => void;
+  onReplaceAll: (searchText: string, onConfirm: (replacement: string) => void) => void;
 }
 
 interface MenuState {
@@ -28,7 +30,7 @@ declare global {
   }
 }
 
-export const CodeEditor: React.FC<CodeEditorProps> = ({ code, onCodeChange, languageName, languageId, fontSize, onFormatCode, isFormatLoading }) => {
+export const CodeEditor: React.FC<CodeEditorProps> = ({ code, onCodeChange, languageName, languageId, fontSize, onFormatCode, isFormatLoading, showToast, onReplaceAll }) => {
   const [copyState, setCopyState] = useState<'copy' | 'check'>('copy');
   const [menu, setMenu] = useState<MenuState>({ visible: false, x: 0, y: 0 });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -105,13 +107,14 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({ code, onCodeChange, lang
         onFormatCode();
     } else if (action === 'changeAll') {
         if (!selectedText) {
-            alert("Please select the text you want to replace.");
+            showToast("Please select the text you want to replace.");
             return;
         }
-        const replacement = prompt(`Replace all occurrences of "${selectedText}" with:`);
-        if (replacement !== null) {
+        onReplaceAll(selectedText, (replacement) => {
+            const count = code.split(selectedText).length - 1;
             onCodeChange(code.split(selectedText).join(replacement));
-        }
+            showToast(`Replaced ${count} occurrence${count !== 1 ? 's' : ''} of "${selectedText}"`);
+        });
     }
     closeMenu();
   };

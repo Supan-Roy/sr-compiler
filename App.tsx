@@ -6,6 +6,7 @@ import { ResizablePanels } from './components/ResizablePanels';
 import { SettingsModal } from './components/SettingsModal';
 import { Toast } from './components/Toast';
 import { ConfirmDialog } from './components/ConfirmDialog';
+import { PromptDialog } from './components/PromptDialog';
 import { Icon } from './components/Icon';
 import { formatCode, startInteractiveRun, continueInteractiveRun, runCodeOnce } from './services/geminiService';
 import { LANGUAGES, CODE_TEMPLATES } from './constants';
@@ -111,12 +112,21 @@ const App: React.FC = () => {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [toast, setToast] = useState<{ message: string; key: number } | null>(null);
+  const [promptDialog, setPromptDialog] = useState<{ searchText: string; onConfirm: (value: string) => void } | null>(null);
   
   // --- Effects for Persistence & System Integration ---
   useEffect(() => localStorage.setItem('sr-compiler:language', JSON.stringify(selectedLanguage)), [selectedLanguage]);
   useEffect(() => localStorage.setItem(`sr-compiler:code:${selectedLanguage.id}`, code), [code, selectedLanguage]);
   useEffect(() => localStorage.setItem('sr-compiler:fontSize', fontSize), [fontSize]);
   useEffect(() => localStorage.setItem('sr-compiler:panelPosition', panelPosition.toString()), [panelPosition]);
+  
+  const showToast = useCallback((message: string) => {
+    setToast({ message, key: Date.now() });
+  }, []);
+  
+  const handleReplaceAll = useCallback((searchText: string, onConfirm: (replacement: string) => void) => {
+    setPromptDialog({ searchText, onConfirm });
+  }, []);
   
   useEffect(() => {
     localStorage.setItem('sr-compiler:theme', theme);
@@ -362,6 +372,8 @@ const App: React.FC = () => {
             fontSize={fontSize}
             onFormatCode={handleFormatCode}
             isFormatLoading={isFormatLoading}
+            showToast={showToast}
+            onReplaceAll={handleReplaceAll}
           />
           <ExecutionPanel
             mode={executionMode}
@@ -387,7 +399,7 @@ const App: React.FC = () => {
       {/* Mobile View (Non-resizable) */}
       <main className="flex-grow flex flex-col md:hidden p-2 gap-4 overflow-hidden pb-20">
          <div className={`flex-1 flex-col min-h-0 ${activeMobileView === 'editor' ? 'flex' : 'hidden'}`}>
-           <CodeEditor code={code} onCodeChange={setCode} languageName={selectedLanguage.name} languageId={selectedLanguage.id} fontSize={fontSize} onFormatCode={handleFormatCode} isFormatLoading={isFormatLoading} />
+           <CodeEditor code={code} onCodeChange={setCode} languageName={selectedLanguage.name} languageId={selectedLanguage.id} fontSize={fontSize} onFormatCode={handleFormatCode} isFormatLoading={isFormatLoading} showToast={showToast} onReplaceAll={handleReplaceAll} />
          </div>
          <div className={`flex-1 flex-col min-h-0 ${activeMobileView === 'output' ? 'flex' : 'hidden'}`}>
            <ExecutionPanel mode={executionMode} onModeChange={setExecutionMode} history={history} isWaitingForInput={isWaitingForInput} onUserInput={handleUserInput} onClearTerminal={handleClearTerminal} input={manualInput} onInputChange={setManualInput} output={manualOutput} expectedOutput={expectedOutput} onExpectedOutputChange={setExpectedOutput} verdict={verdict} isLoading={isRunLoading} isError={isError} isSuccess={isSuccess} fontSize={fontSize} />
@@ -425,6 +437,18 @@ const App: React.FC = () => {
       )}
       {showClearConfirm && (
         <ConfirmDialog title="Clear Editor" message="Are you sure you want to clear the editor? This will reset the code to the default template." onConfirm={handleConfirmClear} onCancel={() => setShowClearConfirm(false)} />
+      )}
+      {promptDialog && (
+        <PromptDialog
+          title="Replace All Occurrences"
+          message={`Replace all occurrences of "${promptDialog.searchText}" with:`}
+          defaultValue=""
+          onConfirm={(replacement) => {
+            promptDialog.onConfirm(replacement);
+            setPromptDialog(null);
+          }}
+          onCancel={() => setPromptDialog(null)}
+        />
       )}
       {toast && (
           <Toast key={toast.key} message={toast.message} onClose={() => setToast(null)} />
