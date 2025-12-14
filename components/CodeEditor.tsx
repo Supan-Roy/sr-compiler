@@ -240,16 +240,16 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({ code, onCodeChange, lang
          <div
             ref={menuRef}
             role="menu"
-            className="fixed z-50 bg-slate-100 dark:bg-slate-700 rounded-md shadow-lg py-1 border border-slate-300 dark:border-slate-600 text-sm"
+            className="fixed z-50 bg-slate-100 dark:bg-slate-800 rounded-md shadow-lg py-1 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100"
             style={{ top: menu.y, left: menu.x }}
          >
-            <button role="menuitem" onClick={() => handleMenuAction('cut')} className="block w-full text-left px-4 py-1.5 hover:bg-slate-200 dark:hover:bg-slate-600">Cut</button>
-            <button role="menuitem" onClick={() => handleMenuAction('copy')} className="block w-full text-left px-4 py-1.5 hover:bg-slate-200 dark:hover:bg-slate-600">Copy</button>
-            <button role="menuitem" onClick={() => handleMenuAction('paste')} className="block w-full text-left px-4 py-1.5 hover:bg-slate-200 dark:hover:bg-slate-600">Paste</button>
+            <button role="menuitem" onClick={() => handleMenuAction('cut')} className="block w-full text-left px-4 py-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100">Cut</button>
+            <button role="menuitem" onClick={() => handleMenuAction('copy')} className="block w-full text-left px-4 py-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100">Copy</button>
+            <button role="menuitem" onClick={() => handleMenuAction('paste')} className="block w-full text-left px-4 py-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100">Paste</button>
             <div className="my-1 border-t border-slate-300 dark:border-slate-600"></div>
-            <button role="menuitem" onClick={() => handleMenuAction('format')} className="block w-full text-left px-4 py-1.5 hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50" disabled={isFormatLoading}>Format Code</button>
+            <button role="menuitem" onClick={() => handleMenuAction('format')} className="block w-full text-left px-4 py-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 disabled:opacity-50" disabled={isFormatLoading}>Format Code</button>
             <div className="my-1 border-t border-slate-300 dark:border-slate-600"></div>
-            <button role="menuitem" onClick={() => handleMenuAction('changeAll')} className="block w-full text-left px-4 py-1.5 hover:bg-slate-200 dark:hover:bg-slate-600">Change All Occurrences</button>
+            <button role="menuitem" onClick={() => handleMenuAction('changeAll')} className="block w-full text-left px-4 py-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100">Change All Occurrences</button>
          </div>,
          document.body
       )}
