@@ -117,7 +117,7 @@ export const continueInteractiveRun = async (chat: null, userInput: string): Pro
     throw new Error("Interactive mode requires user input capability. Please use Manual mode instead.");
 };
 
-// Proper formatter for C and C++ - recalculates indentation and removes extra spaces
+// Proper formatter for C and C++ - recalculates indentation and normalizes spaces
 const formatCCpp = (code: string): string => {
     const lines = code.split('\n');
     let indentLevel = 0;
@@ -132,13 +132,58 @@ const formatCCpp = (code: string): string => {
             continue;
         }
         
-        // Remove extra spaces around operators and punctuation
-        trimmed = trimmed
-            .replace(/\s*<<\s*/g, '<<')  // Remove spaces around <<
-            .replace(/\s*>>\s*/g, '>>')  // Remove spaces around >>
-            .replace(/\s*([+\-*/%&|^<>=!?:;,.])\s*/g, '$1')  // Remove spaces around operators
-            .replace(/\s+/g, ' ')  // Collapse multiple spaces to single space
-            .trim();
+        // Collapse multiple spaces to single space
+        trimmed = trimmed.replace(/\s+/g, ' ');
+        
+        // Fix #include and other preprocessor directives
+        if (trimmed.startsWith('#')) {
+            // Ensure space after directive name
+            trimmed = trimmed.replace(/^(#\w+)\s*/, '$1 ');
+            // Remove spaces inside angle brackets for includes
+            trimmed = trimmed.replace(/<\s*/g, '<').replace(/\s*>/g, '>');
+            trimmed = trimmed.replace(/<([^>]+)>/g, (match, inside) => {
+                return '<' + inside.replace(/\s+/g, '') + '>';
+            });
+        } else {
+            // For non-preprocessor lines, apply formatting rules
+            
+            // First: Combine split operators (e.g., > = becomes >=)
+            trimmed = trimmed.replace(/>\s*=/g, '>=');
+            trimmed = trimmed.replace(/<\s*=/g, '<=');
+            trimmed = trimmed.replace(/=\s*=/g, '==');
+            trimmed = trimmed.replace(/!\s*=/g, '!=');
+            trimmed = trimmed.replace(/&\s*&/g, '&&');
+            trimmed = trimmed.replace(/\|\s*\|/g, '||');
+            trimmed = trimmed.replace(/\+\s*\+/g, '++');
+            trimmed = trimmed.replace(/-\s*-/g, '--');
+            
+            // Comparison operators - keep together with spaces around
+            trimmed = trimmed.replace(/\s*(<=|>=|==|!=)\s*/g, ' $1 ');
+            
+            // Stream operators - add spaces around
+            trimmed = trimmed.replace(/([^<>])\s*<<\s*/g, '$1 << ');
+            trimmed = trimmed.replace(/\s*>>\s*([^>])/g, ' >> $1');
+            
+            // Assignment operators
+            trimmed = trimmed.replace(/([^!<>=+\-*/%])\s*=\s*([^=])/g, '$1 = $2');
+            
+            // Logical operators
+            trimmed = trimmed.replace(/\s*(&&|\|\|)\s*/g, ' $1 ');
+            
+            // Binary operators (between words/numbers)
+            trimmed = trimmed.replace(/(\w)\s*([+\-*/%])\s*(\w)/g, '$1 $2 $3');
+            
+            // Semicolons and commas
+            trimmed = trimmed.replace(/\s*;/g, ';');
+            trimmed = trimmed.replace(/\s*,\s*/g, ', ');
+            
+            // Parentheses
+            trimmed = trimmed.replace(/\(\s+/g, '(');
+            trimmed = trimmed.replace(/\s+\)/g, ')');
+        }
+        
+        // Final cleanup - remove multiple spaces
+        trimmed = trimmed.replace(/\s+/g, ' ').trim();
         
         // Decrease indent for closing braces at the start of the line
         if (trimmed.startsWith('}') || trimmed.startsWith(']') || trimmed.startsWith(')')) {
