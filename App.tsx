@@ -1,5 +1,4 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import type { Chat } from '@google/genai';
 import { Header } from './components/Header';
 import { CodeEditor } from './components/CodeEditor';
 import { ExecutionPanel } from './components/ExecutionPanel';
@@ -100,7 +99,7 @@ const App: React.FC = () => {
   const [manualInput, setManualInput] = useState('');
   const [expectedOutput, setExpectedOutput] = useState('');
   const [verdict, setVerdict] = useState<string | null>(null);
-  const [chat, setChat] = useState<Chat | null>(null);
+  const [chat, setChat] = useState<null>(null);
   const [isWaitingForInput, setIsWaitingForInput] = useState<boolean>(false);
   const [isRunLoading, setIsRunLoading] = useState<boolean>(false);
   const [isFormatLoading, setIsFormatLoading] = useState<boolean>(false);

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Icon } from './Icon';
 import type { Theme } from '../types';
 
@@ -21,8 +21,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onFontSizeChange,
     fontSizes
 }) => {
-  if (!isOpen) return null;
-
   const handleDialogClick = (e: React.MouseEvent) => e.stopPropagation();
 
   const themeOptionClass = (value: Theme) => 

@@ -1,128 +1,124 @@
-import { GoogleGenAI, Chat } from "@google/genai";
+import type { Chat } from "@google/genai";
 import { LANGUAGES } from "../constants";
 
-const getAI = () => {
-    if (!process.env.API_KEY) {
-        throw new Error("API_KEY environment variable not set. Please add your Gemini API key in Settings.");
-    }
-    return new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Map language names to Piston runtime identifiers
+const PISTON_LANGUAGE_MAP: Record<string, string> = {
+    'Python': 'python',
+    'JavaScript': 'javascript',
+    'TypeScript': 'typescript',
+    'C': 'c',
+    'C++': 'cpp',
+    'Java': 'java',
+    'C#': 'csharp',
+    'PHP': 'php',
+    'Ruby': 'ruby',
+    'Go': 'go',
+    'Rust': 'rust',
+    'SQL': 'sql',
+    'HTML': 'html',
 };
 
-const getLanguageAlias = (languageName: string): string => {
-    const lang = LANGUAGES.find(l => l.name === languageName);
-    return lang?.alias || lang?.id || 'plaintext';
-};
+const PISTON_API = 'https://emkc.org/api/v2/piston';
 
-const EXECUTION_MODEL = 'gemini-2.5-flash';
+const getLanguageRuntime = (languageName: string): string => {
+    return PISTON_LANGUAGE_MAP[languageName] || 'python';
+};
 
 export const runCodeOnce = async (code: string, language: string, input: string): Promise<string> => {
-    const languageAlias = getLanguageAlias(language);
-    const prompt = `
-You are an expert code execution engine.
-Execute the following ${language} code with the provided standard input.
-Your response MUST contain ONLY the raw output of the code, and NOTHING ELSE.
-If there is a compilation or runtime error, return the exact error message instead.
-
-Standard Input:
----
-${input || "(empty)"}
----
-
-Code:
-\`\`\`${languageAlias}
-${code}
-\`\`\`
-`;
+    const runtime = getLanguageRuntime(language);
+    
     try {
-        const ai = getAI();
-        const response = await ai.models.generateContent({
-            model: EXECUTION_MODEL,
-            contents: prompt,
+        const response = await fetch(`${PISTON_API}/execute`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                language: runtime,
+                version: '*',
+                files: [
+                    {
+                        name: 'main',
+                        content: code,
+                    }
+                ],
+                stdin: input,
+            }),
         });
-        return response.text.trim();
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        if (result.compile?.stderr) {
+            return result.compile.stderr;
+        }
+
+        if (result.run?.stderr) {
+            return result.run.stderr;
+        }
+
+        return result.run?.stdout || '';
     } catch (error) {
-        console.error("Error running code with Gemini API:", error);
-        throw new Error("Failed to communicate with the execution service.");
+        console.error("Error running code:", error);
+        throw new Error("Failed to execute code. Make sure your code is valid.");
     }
 }
 
-export const startInteractiveRun = async (code: string, language: string): Promise<{ chat: Chat; responseText: string; }> => {
-    const languageAlias = getLanguageAlias(language);
-    const ai = getAI();
-    const chat = ai.chats.create({
-        model: EXECUTION_MODEL,
-    });
-
-    const prompt = `
-You are an expert interactive code execution engine.
-Your task is to execute the given code step-by-step.
-- When the code prints to standard output, return that output.
-- When the code needs to read from standard input (e.g., using cin, input(), scanf), you MUST stop execution. Respond with ALL output generated so far, immediately followed by the special token "[NEEDS_INPUT]".
-- Do NOT invent or guess any user input. Await the next message for the input.
-- After receiving the input, resume execution from where you left off.
-- When the program finishes successfully, provide the final output and then on a new line, the special token "[EXECUTION_COMPLETE]".
-- If there is a compilation or runtime error, return ONLY the exact error message, followed by the special token "[EXECUTION_ERROR]".
-- Return ONLY the raw output, errors, or special tokens. Do not add any explanations, preambles, or markdown formatting.
-
-Here is the ${language} code to execute:
-\`\`\`${languageAlias}
-${code}
-\`\`\`
-Begin execution now.
-`;
-
+export const startInteractiveRun = async (code: string, language: string): Promise<{ chat: Chat | null; responseText: string; }> => {
+    // For interactive mode, we'll use the same execution but return empty chat object
+    // Piston API doesn't support true interactive mode, so we simulate it
     try {
-        const response = await chat.sendMessage({ message: prompt });
-        return { chat, responseText: response.text.trim() };
+        const runtime = getLanguageRuntime(language);
+        
+        const response = await fetch(`${PISTON_API}/execute`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                language: runtime,
+                version: '*',
+                files: [
+                    {
+                        name: 'main',
+                        content: code,
+                    }
+                ],
+                stdin: '',
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        if (result.compile?.stderr) {
+            return { chat: null, responseText: result.compile.stderr };
+        }
+
+        if (result.run?.stderr) {
+            return { chat: null, responseText: result.run.stderr };
+        }
+
+        return { chat: null, responseText: result.run?.stdout || '' };
     } catch (error) {
-        console.error("Error starting interactive run with Gemini API:", error);
-        throw new Error("Failed to start the execution service.");
+        console.error("Error starting interactive run:", error);
+        throw new Error("Failed to start code execution.");
     }
 };
 
-export const continueInteractiveRun = async (chat: Chat, userInput: string): Promise<string> => {
-    try {
-        const response = await chat.sendMessage({ message: userInput });
-        return response.text.trim();
-    } catch (error) {
-        console.error("Error continuing interactive run with Gemini API:", error);
-        throw new Error("Failed to communicate with the execution service.");
-    }
+export const continueInteractiveRun = async (chat: Chat | null, userInput: string): Promise<string> => {
+    // Piston API doesn't support true interactive I/O
+    throw new Error("Interactive mode requires user input capability. Please use Manual mode instead.");
 };
-
 
 export const formatCode = async (code: string, language: string): Promise<string> => {
-    const languageAlias = getLanguageAlias(language);
-    const prompt = `
-You are an expert code formatting tool.
-Reformat the following ${language} code to adhere to standard, conventional style guides for that language (e.g., PEP 8 for Python, Prettier for JavaScript/TypeScript, etc.).
-Return ONLY the formatted code.
-Do not add any explanation, preamble, or markdown code block fences. Just the raw, formatted code.
-
-Code:
-\`\`\`${languageAlias}
-${code}
-\`\`\`
-`;
-
-    try {
-        const ai = getAI();
-        const response = await ai.models.generateContent({
-            model: 'gem-2.5-flash',
-            contents: prompt,
-            config: {
-                thinkingConfig: { thinkingBudget: 0 },
-            },
-        });
-        
-        // Clean up potential markdown fences just in case
-        let formattedCode = response.text.trim();
-        const regex = new RegExp(`^\`\`\`(${languageAlias})?\\s*|\\s*\`\`\`$`, 'g');
-        formattedCode = formattedCode.replace(regex, '');
-
-        return formattedCode.trim();
-    } catch (error) {
-        console.error("Error formatting code with Gemini API:", error);
-        throw new Error("Failed to communicate with the formatting service.");
-    }
+    // Simple formatting without external API - just return the code as-is
+    // For proper formatting, users can use their IDE's formatter
+    return code;
 };
