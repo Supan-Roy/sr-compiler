@@ -1,52 +1,96 @@
 # SR Compiler
 
-A powerful, intelligent online code compiler that executes code in multiple programming languages.
+A powerful, local code compiler that executes code in multiple programming languages with true interactive I/O support - just like VS Code!
 
-**[🚀 Live Demo](https://compiler.supanroy.com/)**
+**[🚀 Live Demo](https://compiler.supanroy.com/)** (uses remote execution)
+**💻 Local Version** - This repository now supports local execution with interactive stdin/stdout!
 
 ## Overview
 
-SR Compiler is a feature-rich web-based code execution platform built with modern web technologies. It provides an interactive environment for writing, executing, and debugging code.
+SR Compiler is a feature-rich code execution platform built with modern web technologies. It provides an interactive environment for writing, executing, and debugging code **locally on your machine** with full support for interactive input/output.
 
-## Features
+## ✨ Features
 
-- **Multi-Language Support** - Execute code in multiple programming languages
-- **Real-Time Execution** - Instant code compilation and execution feedback
-- **Interactive Console** - Built-in input/output console for interactive programs
-- **AI Assistant** - Leverage Gemini AI for code assistance and debugging
-- **Code Editor** - Syntax-highlighted editor with language-specific features
-- **Responsive Design** - Works seamlessly across desktop and mobile devices
-- **Settings Panel** - Customize your coding experience
-- **Live Deployment** - Access your compiler from anywhere at [compiler.supanroy.com](https://compiler.supanroy.com/)
+- **🖥️ Local Code Execution** - Runs code on your machine (like VS Code) with true interactive I/O
+- **💬 Interactive Terminal** - Real-time stdin/stdout interaction with your programs
+- **🌍 Multi-Language Support** - C++, C, Python, JavaScript, Java, and more
+- **📝 Three Execution Modes**:
+  - **Terminal Mode**: Interactive I/O with live input prompts
+  - **Manual Input**: Batch execution with predefined input
+  - **Competitive Mode**: Compare output with expected results
+- **✨ Code Formatting** - Auto-format your code with proper indentation
+- **🎨 Modern UI** - Clean, responsive design that works on all devices
+- **🌗 Dark/Light Mode** - Choose your preferred theme
+- **📦 No External API** - Everything runs locally, fast and secure
 
-## Tech Stack
-
-- **Frontend**: React, TypeScript, Vite
-- **Styling**: Modern CSS with responsive design
-- **AI Integration**: Google Gemini API
-- **Hosting**: Vercel
-- **Build Tool**: Vite
-
-## Getting Started
+## 🚀 Quick Start
 
 ### Prerequisites
 
-- Node.js (v16 or higher)
-- npm or yarn
-- Gemini API key (get one from [Google AI Studio](https://aistudio.google.com/))
+1. **Node.js** (v16 or higher)
+2. **Compilers/Interpreters**:
+   - **C++**: MinGW (g++)  ✅ Already installed at `C:\MinGW\bin\g++.exe`
+   - **C**: gcc (comes with MinGW)
+   - **Python**: [Download here](https://www.python.org/downloads/)
+   - **Java**: [Download JDK](https://www.oracle.com/java/technologies/downloads/)
 
 ### Installation
 
-1. Clone the repository:
+1. **Clone the repository**:
    ```bash
    git clone https://github.com/yourusername/sr-compiler.git
    cd sr-compiler
    ```
 
-2. Install dependencies:
+2. **Install dependencies**:
    ```bash
    npm install
+   npm install express cors uuid
    ```
+
+3. **Start the backend server**:
+   ```bash
+   node server.js
+   ```
+   Should show: `Code execution server running on http://localhost:3001`
+
+4. **Start the frontend** (in a new terminal):
+   ```bash
+   npm run dev
+   ```
+   Should show: `Local: http://localhost:3000/`
+
+5. **Open your browser**: http://localhost:3000
+
+### 🎯 Test It Out!
+
+Try this C++ code:
+```cpp
+#include <iostream>
+using namespace std;
+
+int main() {
+    int n;
+    cout << "Enter a positive integer: ";
+    cin >> n;
+    cout << n << endl;
+    return 0;
+}
+```
+
+1. Paste the code in the editor
+2. Select **"Terminal"** mode from the dropdown
+3. Click **Run** (▶ button)
+4. When prompted "Enter a positive integer: ", type a number and press Enter
+5. See your output! 🎉
+
+## Tech Stack
+
+- **Frontend**: React, TypeScript, Vite
+- **Backend**: Node.js, Express
+- **Code Execution**: Local child processes (g++, gcc, python, node, java)
+- **Styling**: Modern CSS with Tailwind-inspired utilities
+- **Build Tool**: Vite
 
 3. Create a `.env.local` file and add your Gemini API key:
    ```

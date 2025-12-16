@@ -1,120 +1,119 @@
 import { LANGUAGES } from "../constants";
 import prettier from "prettier";
 
-// Map language names to Piston runtime identifiers
-const PISTON_LANGUAGE_MAP: Record<string, string> = {
-    'Python': 'python',
-    'JavaScript': 'javascript',
-    'TypeScript': 'typescript',
-    'C': 'c',
-    'C++': 'cpp',
-    'Java': 'java',
-    'C#': 'csharp',
-    'PHP': 'php',
-    'Ruby': 'ruby',
-    'Go': 'go',
-    'Rust': 'rust',
-    'SQL': 'sql',
-    'HTML': 'html',
-};
+const LOCAL_API = 'http://localhost:3001/api';
 
-const PISTON_API = 'https://emkc.org/api/v2/piston';
-
-const getLanguageRuntime = (languageName: string): string => {
-    return PISTON_LANGUAGE_MAP[languageName] || 'python';
-};
+// Store session ID for interactive mode
+let currentSessionId: string | null = null;
 
 export const runCodeOnce = async (code: string, language: string, input: string): Promise<string> => {
-    const runtime = getLanguageRuntime(language);
-    
     try {
-        const response = await fetch(`${PISTON_API}/execute`, {
+        const response = await fetch(`${LOCAL_API}/execute/once`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                language: runtime,
-                version: '*',
-                files: [
-                    {
-                        name: 'main',
-                        content: code,
-                    }
-                ],
+                code,
+                language,
                 stdin: input,
             }),
         });
 
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            const error = await response.json();
+            throw new Error(error.error || `HTTP error! status: ${response.status}`);
         }
 
         const result = await response.json();
-
-        if (result.compile?.stderr) {
-            return result.compile.stderr;
-        }
-
-        if (result.run?.stderr) {
-            return result.run.stderr;
-        }
-
-        return result.run?.stdout || '';
+        return result.stdout || '';
     } catch (error) {
         console.error("Error running code:", error);
-        throw new Error("Failed to execute code. Make sure your code is valid.");
+        if (error instanceof TypeError && error.message.includes('fetch')) {
+            throw new Error("Failed to connect to local execution server. Make sure the server is running on port 3001.");
+        }
+        throw error;
     }
 }
 
-export const startInteractiveRun = async (code: string, language: string): Promise<{ chat: null; responseText: string; }> => {
-    // For interactive mode, we'll use the same execution but return empty chat object
-    // Piston API doesn't support true interactive mode, so we simulate it
+export const startInteractiveRun = async (code: string, language: string): Promise<{ chat: string; responseText: string; waitingForInput: boolean; }> => {
     try {
-        const runtime = getLanguageRuntime(language);
-        
-        const response = await fetch(`${PISTON_API}/execute`, {
+        const response = await fetch(`${LOCAL_API}/execute/start`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                language: runtime,
-                version: '*',
-                files: [
-                    {
-                        name: 'main',
-                        content: code,
-                    }
-                ],
-                stdin: '',
+                code,
+                language,
             }),
         });
 
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            const error = await response.json();
+            throw new Error(error.error || `HTTP error! status: ${response.status}`);
         }
 
         const result = await response.json();
-
-        if (result.compile?.stderr) {
-            return { chat: null, responseText: result.compile.stderr };
-        }
-
-        if (result.run?.stderr) {
-            return { chat: null, responseText: result.run.stderr };
-        }
-
-        return { chat: null, responseText: result.run?.stdout || '' };
+        currentSessionId = result.sessionId;
+        
+        return { 
+            chat: result.sessionId, 
+            responseText: result.output,
+            waitingForInput: result.waitingForInput ?? false
+        };
     } catch (error) {
         console.error("Error starting interactive run:", error);
-        throw new Error("Failed to start code execution.");
+        if (error instanceof TypeError && error.message.includes('fetch')) {
+            throw new Error("Failed to connect to local execution server. Make sure the server is running on port 3001.");
+        }
+        throw error;
     }
 };
 
-export const continueInteractiveRun = async (chat: null, userInput: string): Promise<string> => {
-    // Piston API doesn't support true interactive I/O
-    throw new Error("Interactive mode requires user input capability. Please use Manual mode instead.");
+export const continueInteractiveRun = async (sessionId: string, userInput: string): Promise<{ output: string; waitingForInput: boolean; }> => {
+    try {
+        const response = await fetch(`${LOCAL_API}/execute/input`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                sessionId,
+                input: userInput,
+            }),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || `HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        return {
+            output: result.output,
+            waitingForInput: result.waitingForInput ?? false
+        };
+    } catch (error) {
+        console.error("Error continuing interactive run:", error);
+        throw error;
+    }
+};
+
+export const killInteractiveSession = async (sessionId: string): Promise<void> => {
+    try {
+        await fetch(`${LOCAL_API}/execute/kill`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                sessionId,
+            }),
+        });
+    } catch (error) {
+        console.error("Error killing session:", error);
+    }
 };
 
 // Proper formatter for C and C++ - recalculates indentation and normalizes spaces

@@ -8,7 +8,7 @@ import { Toast } from './components/Toast';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { PromptDialog } from './components/PromptDialog';
 import { Icon } from './components/Icon';
-import { formatCode, startInteractiveRun, continueInteractiveRun, runCodeOnce } from './services/geminiService';
+import { formatCode, startInteractiveRun, continueInteractiveRun, runCodeOnce, killInteractiveSession } from './services/codeExecutionService';
 import { LANGUAGES, CODE_TEMPLATES } from './constants';
 import type { Language, ExecutionMode, Theme } from './types';
 
@@ -100,7 +100,7 @@ const App: React.FC = () => {
   const [manualInput, setManualInput] = useState('');
   const [expectedOutput, setExpectedOutput] = useState('');
   const [verdict, setVerdict] = useState<string | null>(null);
-  const [chat, setChat] = useState<null>(null);
+  const [chat, setChat] = useState<string | null>(null);
   const [isWaitingForInput, setIsWaitingForInput] = useState<boolean>(false);
   const [isRunLoading, setIsRunLoading] = useState<boolean>(false);
   const [isFormatLoading, setIsFormatLoading] = useState<boolean>(false);
@@ -153,30 +153,21 @@ const App: React.FC = () => {
 
 
   // --- Core Handlers ---
-  const processInteractiveResponse = (responseText: string) => {
-    let output = responseText;
-    let hadUpdate = false;
+  const processInteractiveResponse = (responseText: string, waitingForInput: boolean) => {
+    const output = responseText;
     
-    if (output.includes("[NEEDS_INPUT]")) {
-        output = output.replace("[NEEDS_INPUT]", "").trimEnd();
-        setIsWaitingForInput(true);
-        hadUpdate = true;
-    }
-    if (output.includes("[EXECUTION_COMPLETE]")) {
-        output = output.replace("[EXECUTION_COMPLETE]", "\n\n[Program finished]").trim();
-        setIsWaitingForInput(false);
-        setChat(null);
-        hadUpdate = true;
-    }
-    if (output.includes("[EXECUTION_ERROR]")) {
-        output = output.replace("[EXECUTION_ERROR]", "").trim();
-        setIsError(true);
-        setIsWaitingForInput(false);
-        setChat(null);
-        hadUpdate = true;
-    }
-    if (output || hadUpdate) {
+    if (output) {
       setHistory(prev => [...prev, { type: 'stdout', content: output }]);
+    }
+    
+    // Check if program has finished
+    const programFinished = output.includes('[Program finished');
+    
+    if (programFinished) {
+      setIsWaitingForInput(false);
+      setChat(null);
+    } else {
+      setIsWaitingForInput(waitingForInput);
     }
   };
 
@@ -211,9 +202,9 @@ const App: React.FC = () => {
 
     if (executionMode === 'interactive') {
       try {
-        const { chat: newChat, responseText } = await startInteractiveRun(code, selectedLanguage.name);
+        const { chat: newChat, responseText, waitingForInput } = await startInteractiveRun(code, selectedLanguage.name);
         setChat(newChat);
-        processInteractiveResponse(responseText);
+        processInteractiveResponse(responseText, waitingForInput);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
         setHistory([{ type: 'stdout', content: `Error: ${errorMessage}` }]);
@@ -264,8 +255,8 @@ const App: React.FC = () => {
     setIsRunLoading(true);
 
     try {
-        const responseText = await continueInteractiveRun(chat, userInput);
-        processInteractiveResponse(responseText);
+        const { output, waitingForInput } = await continueInteractiveRun(chat, userInput);
+        processInteractiveResponse(output, waitingForInput);
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
         setHistory(prev => [...prev, { type: 'stdout', content: `Error: ${errorMessage}` }]);
@@ -304,14 +295,17 @@ const App: React.FC = () => {
     setShowClearConfirm(false);
   }, [selectedLanguage]);
 
-  const handleClearTerminal = useCallback(() => {
+  const handleClearTerminal = useCallback(async () => {
+    if (chat) {
+      await killInteractiveSession(chat);
+    }
     setHistory([]);
     setChat(null);
     setIsWaitingForInput(false);
     setIsRunLoading(false);
     setIsError(false);
     setIsSuccess(false);
-  }, []);
+  }, [chat]);
 
   const handleDownloadCode = () => {
     const blob = new Blob([code], { type: 'text/plain;charset=utf-8' });
