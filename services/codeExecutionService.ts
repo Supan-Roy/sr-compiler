@@ -11,17 +11,23 @@ let interactiveSessions = new Map<string, { output: string; completed: boolean }
 // Map language IDs to Piston runtime names
 const languageMap: Record<string, { language: string; version: string }> = {
     'cpp': { language: 'c++', version: '10.2.0' },
+    'c++': { language: 'c++', version: '10.2.0' },
     'c': { language: 'c', version: '10.2.0' },
     'javascript': { language: 'javascript', version: '18.15.0' },
+    'js': { language: 'javascript', version: '18.15.0' },
     'python': { language: 'python', version: '3.10.0' },
+    'py': { language: 'python', version: '3.10.0' },
     'java': { language: 'java', version: '15.0.2' },
     'go': { language: 'go', version: '1.16.2' },
     'typescript': { language: 'typescript', version: '5.0.3' },
+    'ts': { language: 'typescript', version: '5.0.3' },
 };
 
 export const runCodeOnce = async (code: string, language: string, input: string): Promise<string> => {
     try {
-        const runtime = languageMap[language];
+        // Normalize language name to lowercase
+        const langKey = language.toLowerCase();
+        const runtime = languageMap[langKey];
         if (!runtime) {
             throw new Error(`Unsupported language: ${language}`);
         }
@@ -75,7 +81,9 @@ export const runCodeOnce = async (code: string, language: string, input: string)
 
 export const startInteractiveRun = async (code: string, language: string): Promise<{ chat: string; responseText: string; waitingForInput: boolean; }> => {
     try {
-        const runtime = languageMap[language];
+        // Normalize language name to lowercase
+        const langKey = language.toLowerCase();
+        const runtime = languageMap[langKey];
         if (!runtime) {
             throw new Error(`Unsupported language: ${language}`);
         }
