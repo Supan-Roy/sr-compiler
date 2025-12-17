@@ -1,98 +1,155 @@
 import { LANGUAGES } from "../constants";
 import prettier from "prettier";
 
-const LOCAL_API = 'http://localhost:3001/api';
+// Use Piston API for code execution (free, no server needed)
+const PISTON_API = 'https://emkc.org/api/v2/piston';
 
 // Store session ID for interactive mode
 let currentSessionId: string | null = null;
+let interactiveSessions = new Map<string, { output: string; completed: boolean }>();
+
+// Map language IDs to Piston runtime names
+const languageMap: Record<string, { language: string; version: string }> = {
+    'cpp': { language: 'c++', version: '10.2.0' },
+    'c': { language: 'c', version: '10.2.0' },
+    'javascript': { language: 'javascript', version: '18.15.0' },
+    'python': { language: 'python', version: '3.10.0' },
+    'java': { language: 'java', version: '15.0.2' },
+    'go': { language: 'go', version: '1.16.2' },
+    'typescript': { language: 'typescript', version: '5.0.3' },
+};
 
 export const runCodeOnce = async (code: string, language: string, input: string): Promise<string> => {
     try {
-        const response = await fetch(`${LOCAL_API}/execute/once`, {
+        const runtime = languageMap[language];
+        if (!runtime) {
+            throw new Error(`Unsupported language: ${language}`);
+        }
+
+        const response = await fetch(`${PISTON_API}/execute`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                code,
-                language,
+                language: runtime.language,
+                version: runtime.version,
+                files: [
+                    {
+                        name: `main.${language === 'cpp' ? 'cpp' : language === 'python' ? 'py' : language === 'java' ? 'java' : language === 'go' ? 'go' : language === 'typescript' ? 'ts' : language === 'c' ? 'c' : 'js'}`,
+                        content: code,
+                    },
+                ],
                 stdin: input,
+                compile_timeout: 10000,
+                run_timeout: 3000,
             }),
         });
 
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || `HTTP error! status: ${response.status}`);
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
 
         const result = await response.json();
-        return result.stdout || '';
+        
+        // Combine stdout and stderr, prioritize stderr if present (for errors)
+        let output = '';
+        if (result.compile && result.compile.stderr) {
+            output += 'Compilation Error:\n' + result.compile.stderr + '\n';
+        }
+        if (result.run) {
+            if (result.run.stderr) {
+                output += result.run.stderr;
+            }
+            if (result.run.stdout) {
+                output += result.run.stdout;
+            }
+        }
+        
+        return output || 'No output';
     } catch (error) {
         console.error("Error running code:", error);
-        if (error instanceof TypeError && error.message.includes('fetch')) {
-            throw new Error("Failed to connect to local execution server. Make sure the server is running on port 3001.");
-        }
-        throw error;
+        throw new Error(`Execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 }
 
 export const startInteractiveRun = async (code: string, language: string): Promise<{ chat: string; responseText: string; waitingForInput: boolean; }> => {
     try {
-        const response = await fetch(`${LOCAL_API}/execute/start`, {
+        const runtime = languageMap[language];
+        if (!runtime) {
+            throw new Error(`Unsupported language: ${language}`);
+        }
+
+        const sessionId = Date.now().toString() + Math.random().toString(36).substring(7);
+        currentSessionId = sessionId;
+        
+        const response = await fetch(`${PISTON_API}/execute`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                code,
-                language,
+                language: runtime.language,
+                version: runtime.version,
+                files: [
+                    {
+                        name: `main.${language === 'cpp' ? 'cpp' : language === 'python' ? 'py' : language === 'java' ? 'java' : language === 'go' ? 'go' : language === 'typescript' ? 'ts' : language === 'c' ? 'c' : 'js'}`,
+                        content: code,
+                    },
+                ],
+                stdin: '',
+                compile_timeout: 10000,
+                run_timeout: 3000,
             }),
         });
 
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || `HTTP error! status: ${response.status}`);
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
 
         const result = await response.json();
-        currentSessionId = result.sessionId;
+        
+        let output = '';
+        if (result.compile && result.compile.stderr) {
+            output += 'Compilation Error:\n' + result.compile.stderr + '\n';
+        }
+        if (result.run) {
+            if (result.run.stderr) {
+                output += result.run.stderr;
+            }
+            if (result.run.stdout) {
+                output += result.run.stdout;
+            }
+        }
+        
+        interactiveSessions.set(sessionId, { 
+            output: output || 'No output', 
+            completed: true 
+        });
         
         return { 
-            chat: result.sessionId, 
-            responseText: result.output,
-            waitingForInput: result.waitingForInput ?? false
+            chat: sessionId, 
+            responseText: output || 'No output',
+            waitingForInput: false
         };
     } catch (error) {
         console.error("Error starting interactive run:", error);
-        if (error instanceof TypeError && error.message.includes('fetch')) {
-            throw new Error("Failed to connect to local execution server. Make sure the server is running on port 3001.");
-        }
-        throw error;
+        throw new Error(`Execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 };
 
 export const continueInteractiveRun = async (sessionId: string, userInput: string): Promise<{ output: string; waitingForInput: boolean; }> => {
     try {
-        const response = await fetch(`${LOCAL_API}/execute/input`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                sessionId,
-                input: userInput,
-            }),
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || `HTTP error! status: ${response.status}`);
+        const session = interactiveSessions.get(sessionId);
+        if (!session) {
+            throw new Error('Session not found');
         }
-
-        const result = await response.json();
+        
+        // For now, interactive input after initial execution isn't supported with Piston
+        // Return the stored output
         return {
-            output: result.output,
-            waitingForInput: result.waitingForInput ?? false
+            output: session.output,
+            waitingForInput: false
         };
     } catch (error) {
         console.error("Error continuing interactive run:", error);
@@ -102,15 +159,11 @@ export const continueInteractiveRun = async (sessionId: string, userInput: strin
 
 export const killInteractiveSession = async (sessionId: string): Promise<void> => {
     try {
-        await fetch(`${LOCAL_API}/execute/kill`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                sessionId,
-            }),
-        });
+        // Clean up the session from our map
+        interactiveSessions.delete(sessionId);
+        if (currentSessionId === sessionId) {
+            currentSessionId = null;
+        }
     } catch (error) {
         console.error("Error killing session:", error);
     }
