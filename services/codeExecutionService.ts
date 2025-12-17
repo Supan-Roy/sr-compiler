@@ -1,8 +1,9 @@
 import { LANGUAGES } from "../constants";
 import prettier from "prettier";
 
-// Try local server first (true interactive), fallback to Piston API
-const LOCAL_API = 'http://localhost:3001/api';
+// Use environment variable for server URL, fallback to localhost for development
+const SERVER_URL = import.meta.env.VITE_EXECUTION_SERVER_URL || 'http://localhost:3001';
+const EXECUTION_API = `${SERVER_URL}/api`;
 const PISTON_API = 'https://emkc.org/api/v2/piston';
 
 // Check if local server is available
@@ -14,9 +15,9 @@ const checkLocalServer = async (): Promise<boolean> => {
     serverCheckPromise = (async () => {
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 500);
+            const timeoutId = setTimeout(() => controller.abort(), 2000);
             
-            const response = await fetch(`${LOCAL_API}/health`, { 
+            const response = await fetch(`${EXECUTION_API}/health`, { 
                 method: 'GET',
                 signal: controller.signal
             });
@@ -51,10 +52,10 @@ const languageMap: Record<string, { language: string; version: string }> = {
 export const runCodeOnce = async (code: string, language: string, input: string): Promise<string> => {
     const hasLocalServer = await checkLocalServer();
     
-    // Try local server first for better experience
+    // Try execution server first for better experience
     if (hasLocalServer) {
         try {
-            const response = await fetch(`${LOCAL_API}/execute/once`, {
+            const response = await fetch(`${EXECUTION_API}/execute/once`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ code, language, stdin: input }),
@@ -118,10 +119,10 @@ export const runCodeOnce = async (code: string, language: string, input: string)
 export const startInteractiveRun = async (code: string, language: string, stdin: string = ''): Promise<{ chat: string; responseText: string; waitingForInput: boolean; }> => {
     const hasLocalServer = await checkLocalServer();
     
-    // Use local server for TRUE interactive (like VS Code)
+    // Use execution server for TRUE interactive (like VS Code)
     if (hasLocalServer) {
         try {
-            const response = await fetch(`${LOCAL_API}/execute/start`, {
+            const response = await fetch(`${EXECUTION_API}/execute/start`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ code, language }),
@@ -198,10 +199,10 @@ export const startInteractiveRun = async (code: string, language: string, stdin:
 export const continueInteractiveRun = async (sessionId: string, userInput: string): Promise<{ output: string; waitingForInput: boolean; }> => {
     const hasLocalServer = await checkLocalServer();
     
-    // Use local server for TRUE interactive continuation
+    // Use execution server for TRUE interactive continuation
     if (hasLocalServer) {
         try {
-            const response = await fetch(`${LOCAL_API}/execute/input`, {
+            const response = await fetch(`${EXECUTION_API}/execute/input`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ sessionId, input: userInput }),
@@ -231,7 +232,7 @@ export const killInteractiveSession = async (sessionId: string): Promise<void> =
     
     if (hasLocalServer) {
         try {
-            await fetch(`${LOCAL_API}/execute/kill`, {
+            await fetch(`${EXECUTION_API}/execute/kill`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ sessionId }),

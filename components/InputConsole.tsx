@@ -18,7 +18,7 @@ export const InputConsole: React.FC<InputConsoleProps> = ({ input, onInputChange
         value={input}
         onChange={(e) => onInputChange(e.target.value)}
         className={`w-full flex-grow p-4 bg-transparent text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 font-mono resize-none focus:outline-none leading-relaxed ${fontSize}`}
-        placeholder="Enter standard input for your program here..."
+        placeholder="Enter ALL input here BEFORE running (one value per line for multiple inputs)..."
         spellCheck="false"
       />
     </div>

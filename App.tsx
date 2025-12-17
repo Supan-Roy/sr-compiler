@@ -202,6 +202,10 @@ const App: React.FC = () => {
 
     if (executionMode === 'interactive') {
       try {
+        // Show hint if input is provided
+        if (manualInput.trim()) {
+          setHistory([{ type: 'stdout', content: `[Using input from Input Console]\n` }]);
+        }
         const { chat: newChat, responseText, waitingForInput } = await startInteractiveRun(code, selectedLanguage.name, manualInput);
         setChat(newChat);
         processInteractiveResponse(responseText, waitingForInput);
