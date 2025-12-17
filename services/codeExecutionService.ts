@@ -1,8 +1,34 @@
 import { LANGUAGES } from "../constants";
 import prettier from "prettier";
 
-// Use Piston API - works anywhere, no server needed
+// Try local server first (true interactive), fallback to Piston API
+const LOCAL_API = 'http://localhost:3001/api';
 const PISTON_API = 'https://emkc.org/api/v2/piston';
+
+// Check if local server is available
+let serverCheckPromise: Promise<boolean> | null = null;
+
+const checkLocalServer = async (): Promise<boolean> => {
+    if (serverCheckPromise) return serverCheckPromise;
+    
+    serverCheckPromise = (async () => {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 500);
+            
+            const response = await fetch(`${LOCAL_API}/health`, { 
+                method: 'GET',
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            return response.ok;
+        } catch {
+            return false;
+        }
+    })();
+    
+    return serverCheckPromise;
+};
 
 // Store session ID for interactive mode
 let currentSessionId: string | null = null;
@@ -23,6 +49,27 @@ const languageMap: Record<string, { language: string; version: string }> = {
 };
 
 export const runCodeOnce = async (code: string, language: string, input: string): Promise<string> => {
+    const hasLocalServer = await checkLocalServer();
+    
+    // Try local server first for better experience
+    if (hasLocalServer) {
+        try {
+            const response = await fetch(`${LOCAL_API}/execute/once`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code, language, stdin: input }),
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                return result.stdout || '';
+            }
+        } catch (error) {
+            console.warn("Local server failed, using Piston");
+        }
+    }
+    
+    // Fallback to Piston API
     try {
         const langKey = language.toLowerCase();
         const runtime = languageMap[langKey];
@@ -69,6 +116,33 @@ export const runCodeOnce = async (code: string, language: string, input: string)
 }
 
 export const startInteractiveRun = async (code: string, language: string, stdin: string = ''): Promise<{ chat: string; responseText: string; waitingForInput: boolean; }> => {
+    const hasLocalServer = await checkLocalServer();
+    
+    // Use local server for TRUE interactive (like VS Code)
+    if (hasLocalServer) {
+        try {
+            const response = await fetch(`${LOCAL_API}/execute/start`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code, language }),
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                currentSessionId = result.sessionId;
+                
+                return { 
+                    chat: result.sessionId, 
+                    responseText: result.output,
+                    waitingForInput: result.waitingForInput ?? false
+                };
+            }
+        } catch (error) {
+            console.warn("Local server failed, using Piston");
+        }
+    }
+    
+    // Fallback to Piston (requires input upfront)
     try {
         const langKey = language.toLowerCase();
         const runtime = languageMap[langKey];
@@ -95,8 +169,30 @@ export const startInteractiveRun = async (code: string, language: string, stdin:
             }),
         });
 
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+    const hasLocalServer = await checkLocalServer();
+    
+    // Use local server for TRUE interactive continuation
+    if (hasLocalServer) {
+        try {
+            const response = await fetch(`${LOCAL_API}/execute/input`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sessionId, input: userInput }),
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                return {
+                    output: result.output,
+                    waitingForInput: result.waitingForInput ?? false
+                };
+            }
+        } catch (error) {
+            console.error("Error continuing interactive run:", error);
+        }
+    }
+    
+    // Piston doesn't support interactive continuationstatus: ${response.status}`);
         }
 
         const result = await response.json();
@@ -109,6 +205,20 @@ export const startInteractiveRun = async (code: string, language: string, stdin:
             if (result.run.stderr) output += result.run.stderr;
             if (result.run.stdout) output += result.run.stdout;
         }
+    const hasLocalServer = await checkLocalServer();
+    
+    if (hasLocalServer) {
+        try {
+            await fetch(`${LOCAL_API}/execute/kill`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sessionId }),
+            });
+        } catch (error) {
+            console.error("Error killing session:", error);
+        }
+    }
+    
         
         return { 
             chat: sessionId, 
