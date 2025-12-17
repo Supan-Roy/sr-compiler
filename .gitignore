@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Temporary execution files
+temp/
+*.exe
+*.out
+*.o
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
