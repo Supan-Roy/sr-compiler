@@ -69,29 +69,29 @@ export const runCodeOnce = async (code: string, language: string, input: string)
 }
 
 export const startInteractiveRun = async (code: string, language: string, stdin: string = ''): Promise<{ chat: string; responseText: string; waitingForInput: boolean; }> => {
-    const hasLocalServer = await checkLocalServer();
-    
-    if (hasLocalServer) {
-        // Use local server for TRUE interactive execution (like VS Code)
-        try {
-            const response = await fetch(`${LOCAL_API}/execute/start`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code, language }),
-            });
+    try {
+        const langKey = language.toLowerCase();
+        const runtime = languageMap[langKey];
+        if (!runtime) {
+            throw new Error(`Unsupported language: ${language}`);
+        }
 
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error || `HTTP error! status: ${response.status}`);
-            }
-
-            const result = await response.json();
-            currentSessionId = result.sessionId;
-            
-            return { 
-                chat: result.sessionId, 
-                responseText: result.output,
-                waitingForInput: result.waitingForInput ?? false
+        const sessionId = Date.now().toString() + Math.random().toString(36).substring(7);
+        currentSessionId = sessionId;
+        
+        const response = await fetch(`${PISTON_API}/execute`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                language: runtime.language,
+                version: runtime.version,
+                files: [{
+                    name: `main.${langKey.includes('c++') || langKey === 'cpp' ? 'cpp' : langKey.includes('py') || langKey === 'python' ? 'py' : langKey === 'java' ? 'java' : langKey === 'go' ? 'go' : langKey.includes('ts') || langKey === 'typescript' ? 'ts' : langKey === 'c' ? 'c' : 'js'}`,
+                    content: code,
+                }],
+                stdin: stdin,
+                compile_timeout: 10000,
+                run_timeout: 3000,
             }),
         });
 
@@ -106,14 +106,9 @@ export const startInteractiveRun = async (code: string, language: string, stdin:
             output += 'Compilation Error:\n' + result.compile.stderr + '\n';
         }
         if (result.run) {
-    const sessionId = Date.now().toString() + Math.random().toString(36).substring(7);
-    currentSessionId = sessionId;
-    
-    
-        interactiveSessions.set(sessionId, { 
-            output: output || 'No output', 
-            completed: true 
-        });
+            if (result.run.stderr) output += result.run.stderr;
+            if (result.run.stdout) output += result.run.stdout;
+        }
         
         return { 
             chat: sessionId, 
@@ -131,22 +126,11 @@ export const continueInteractiveRun = async (sessionId: string, userInput: strin
     // All input must be provided upfront
     return {
         output: '',
-        waitingForInput: falserver = await checkLocalServer();
-    
-    if (hasLocalServer) {
-        try {
-            await fetch(`${LOCAL_API}/execute/kill`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sessionId }),
-            });
-        } catch (error) {
-            console.error("Error killing session:", error);
-        }
-    }
-    
-    // Clean up local session tracking
-    interactiveSessions.delete(sessionId);
+        waitingForInput: false
+    };
+};
+
+export const killInteractiveSession = async (sessionId: string): Promise<void> => {
     if (currentSessionId === sessionId) {
         currentSessionId = null;
     }
@@ -172,6 +156,22 @@ const formatCCpp = (code: string): string => {
         
         // Fix #include and other preprocessor directives
         if (trimmed.startsWith('#')) {
+            // Ensure space after directive name
+            trimmed = trimmed.replace(/^(#\w+)\s*/, '$1 ');
+            // Remove spaces inside angle brackets for includes
+            trimmed = trimmed.replace(/<\s*/g, '<').replace(/\s*>/g, '>');
+            trimmed = trimmed.replace(/<([^>]+)>/g, (match, inside) => {
+                return '<' + inside.replace(/\s+/g, '') + '>';
+            });
+        } else {
+            // For non-preprocessor lines, apply formatting rules
+            
+            // First: Combine split operators (e.g., > = becomes >=)
+            trimmed = trimmed.replace(/>\s*=/g, '>=');
+            trimmed = trimmed.replace(/<\s*=/g, '<=');
+            trimmed = trimmed.replace(/=\s*=/g, '==');
+            trimmed = trimmed.replace(/!\s*=/g, '!=');
+            trimmed = trimmed.replace(/&\s*&/g, '&&');
             trimmed = trimmed.replace(/\|\s*\|/g, '||');
             trimmed = trimmed.replace(/\+\s*\+/g, '++');
             trimmed = trimmed.replace(/-\s*-/g, '--');
