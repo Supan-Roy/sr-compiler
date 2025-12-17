@@ -202,7 +202,7 @@ const App: React.FC = () => {
 
     if (executionMode === 'interactive') {
       try {
-        const { chat: newChat, responseText, waitingForInput } = await startInteractiveRun(code, selectedLanguage.name);
+        const { chat: newChat, responseText, waitingForInput } = await startInteractiveRun(code, selectedLanguage.name, manualInput);
         setChat(newChat);
         processInteractiveResponse(responseText, waitingForInput);
       } catch (error) {

@@ -388,6 +388,11 @@ app.post('/api/execute/once', async (req, res) => {
     }
 });
 
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok' });
+});
+
 app.listen(PORT, () => {
     console.log(`Code execution server running on http://localhost:${PORT}`);
 });
