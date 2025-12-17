@@ -208,6 +208,14 @@ export const continueInteractiveRun = async (sessionId: string, userInput: strin
                 body: JSON.stringify({ sessionId, input: userInput }),
             });
 
+            if (response.status === 404 || response.status === 410) {
+                throw new Error('Session expired or process terminated. Please run your code again.');
+            }
+
+            if (response.status === 429) {
+                throw new Error('Server is busy. Please try again later.');
+            }
+
             if (response.ok) {
                 const result = await response.json();
                 return {
@@ -215,16 +223,16 @@ export const continueInteractiveRun = async (sessionId: string, userInput: strin
                     waitingForInput: result.waitingForInput ?? false
                 };
             }
+
+            throw new Error(`Server error: ${response.status}`);
         } catch (error) {
             console.error("Error continuing interactive run:", error);
+            throw error instanceof Error ? error : new Error('Failed to send input');
         }
     }
     
     // Piston doesn't support interactive continuation
-    return {
-        output: '',
-        waitingForInput: false
-    };
+    throw new Error('Local server unavailable. Please ensure the execution server is running.');
 };
 
 export const killInteractiveSession = async (sessionId: string): Promise<void> => {

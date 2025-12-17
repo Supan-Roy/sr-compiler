@@ -14,6 +14,52 @@ import type { Language, ExecutionMode, Theme } from './types';
 
 const FONT_SIZES = ['text-sm', 'text-base', 'text-lg'];
 
+// --- Storage Utility Functions ---
+const safeSetItem = (key: string, value: string): void => {
+  try {
+    localStorage.setItem(key, value);
+  } catch (error) {
+    if (error instanceof Error && error.name === 'QuotaExceededError') {
+      console.warn(`localStorage quota exceeded for key: ${key}. Attempting to clear old data...`);
+      // Try to clear old code entries for languages not currently in use
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('sr-compiler:code:')) {
+            localStorage.removeItem(k);
+            break;
+          }
+        }
+        localStorage.setItem(key, value);
+      } catch (retryError) {
+        console.error(`Failed to save to localStorage: ${key}`, retryError);
+        // Fall back to sessionStorage
+        try {
+          sessionStorage.setItem(key, value);
+        } catch (sessionError) {
+          console.error(`Failed to save to sessionStorage: ${key}`, sessionError);
+        }
+      }
+    } else {
+      console.error(`Error saving to localStorage: ${key}`, error);
+    }
+  }
+};
+
+const safeGetItem = (key: string): string | null => {
+  try {
+    return localStorage.getItem(key);
+  } catch (error) {
+    console.warn(`Failed to read from localStorage: ${key}. Falling back to sessionStorage.`, error);
+    try {
+      return sessionStorage.getItem(key);
+    } catch (sessionError) {
+      console.error(`Failed to read from sessionStorage: ${key}`, sessionError);
+      return null;
+    }
+  }
+};
+
 // --- State Initialization ---
 const getInitialState = () => {
   const urlParams = new URLSearchParams(window.location.search);
@@ -55,7 +101,7 @@ const getInitialState = () => {
 
 const getInitialLanguage = (): Language => {
   try {
-    const savedLangJson = localStorage.getItem('sr-compiler:language');
+    const savedLangJson = safeGetItem('sr-compiler:language');
     if (savedLangJson) {
       const savedLang = JSON.parse(savedLangJson) as Language;
       if (LANGUAGES.some(l => l.id === savedLang.id)) {
@@ -67,22 +113,22 @@ const getInitialLanguage = (): Language => {
 };
 
 const getInitialCode = (lang: Language): string => {
-  const savedCode = localStorage.getItem(`sr-compiler:code:${lang.id}`);
+  const savedCode = safeGetItem(`sr-compiler:code:${lang.id}`);
   return savedCode !== null ? savedCode : CODE_TEMPLATES[lang.id];
 };
 
 const getInitialFontSize = (): string => {
-  const savedFontSize = localStorage.getItem('sr-compiler:fontSize');
+  const savedFontSize = safeGetItem('sr-compiler:fontSize');
   return savedFontSize && FONT_SIZES.includes(savedFontSize) ? savedFontSize : FONT_SIZES[1];
 };
 
 const getInitialTheme = (): Theme => {
-  const savedTheme = localStorage.getItem('sr-compiler:theme');
+  const savedTheme = safeGetItem('sr-compiler:theme');
   return (savedTheme as Theme) || 'dark';
 };
 
 const getInitialPanelPosition = (): number => {
-    const savedPosition = localStorage.getItem('sr-compiler:panelPosition');
+    const savedPosition = safeGetItem('sr-compiler:panelPosition');
     return savedPosition ? parseFloat(savedPosition) : 50;
 };
 // --- End State Initialization ---
@@ -115,10 +161,10 @@ const App: React.FC = () => {
   const [promptDialog, setPromptDialog] = useState<{ searchText: string; onConfirm: (value: string) => void } | null>(null);
   
   // --- Effects for Persistence & System Integration ---
-  useEffect(() => localStorage.setItem('sr-compiler:language', JSON.stringify(selectedLanguage)), [selectedLanguage]);
-  useEffect(() => localStorage.setItem(`sr-compiler:code:${selectedLanguage.id}`, code), [code, selectedLanguage]);
-  useEffect(() => localStorage.setItem('sr-compiler:fontSize', fontSize), [fontSize]);
-  useEffect(() => localStorage.setItem('sr-compiler:panelPosition', panelPosition.toString()), [panelPosition]);
+  useEffect(() => safeSetItem('sr-compiler:language', JSON.stringify(selectedLanguage)), [selectedLanguage]);
+  useEffect(() => safeSetItem(`sr-compiler:code:${selectedLanguage.id}`, code), [code, selectedLanguage]);
+  useEffect(() => safeSetItem('sr-compiler:fontSize', fontSize), [fontSize]);
+  useEffect(() => safeSetItem('sr-compiler:panelPosition', panelPosition.toString()), [panelPosition]);
   
   const showToast = useCallback((message: string) => {
     setToast({ message, key: Date.now() });
@@ -129,7 +175,7 @@ const App: React.FC = () => {
   }, []);
   
   useEffect(() => {
-    localStorage.setItem('sr-compiler:theme', theme);
+    safeSetItem('sr-compiler:theme', theme);
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = () => {
         if (theme === 'system') {

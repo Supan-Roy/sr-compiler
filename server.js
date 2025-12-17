@@ -18,6 +18,45 @@ app.use(express.json());
 // Store active processes
 const activeProcesses = new Map();
 
+// Session configuration
+const SESSION_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+const MAX_SESSIONS = 20;
+const SESSION_CLEANUP_INTERVAL = 1 * 60 * 1000; // 1 minute
+const PROCESS_TIMEOUT = 30 * 1000; // 30 seconds per process
+
+// Auto-cleanup old sessions
+const cleanupInterval = setInterval(() => {
+    const now = Date.now();
+    for (const [sessionId, sessionData] of activeProcesses.entries()) {
+        if (now - sessionData.createdAt > SESSION_TIMEOUT) {
+            console.log(`Auto-cleaning expired session: ${sessionId}`);
+            if (!sessionData.process.killed) {
+                sessionData.process.kill();
+            }
+            activeProcesses.delete(sessionId);
+            fs.rm(sessionData.sessionDir, { recursive: true, force: true }).catch(console.error);
+        }
+    }
+    
+    // Log active sessions
+    console.log(`Active sessions: ${activeProcesses.size}`);
+}, SESSION_CLEANUP_INTERVAL);
+
+// Graceful shutdown
+process.on('exit', () => {
+    clearInterval(cleanupInterval);
+    for (const sessionData of activeProcesses.values()) {
+        if (!sessionData.process.killed) {
+            sessionData.process.kill();
+        }
+    }
+});
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', activeSessions: activeProcesses.size });
+});
+
 // Temporary directory for code files
 const TEMP_DIR = path.join(__dirname, 'temp');
 
@@ -87,6 +126,12 @@ const LANGUAGE_CONFIG = {
 // Start interactive session
 app.post('/api/execute/start', async (req, res) => {
     const { code, language } = req.body;
+    
+    // Check session limit
+    if (activeProcesses.size >= MAX_SESSIONS) {
+        return res.status(429).json({ error: `Server busy. Maximum ${MAX_SESSIONS} concurrent sessions reached. Please try again later.` });
+    }
+    
     const sessionId = uuidv4();
     
     try {
@@ -164,10 +209,20 @@ app.post('/api/execute/start', async (req, res) => {
             process: childProcess,
             sessionDir,
             outputBuffer: '',
-            waitingForInput: false
+            waitingForInput: false,
+            createdAt: Date.now(),
+            lastActivityAt: Date.now()
         };
 
         activeProcesses.set(sessionId, sessionData);
+
+        // Process timeout handler
+        const processTimeout = setTimeout(() => {
+            if (!childProcess.killed) {
+                console.log(`Killing process due to timeout: ${sessionId}`);
+                childProcess.kill('SIGTERM');
+            }
+        }, PROCESS_TIMEOUT);
 
         // Handle process output
         childProcess.stdout.on('data', (data) => {
@@ -178,8 +233,7 @@ app.post('/api/execute/start', async (req, res) => {
             sessionData.outputBuffer += data.toString();
         });
 
-        childProcess.on('close', async (code) => {
-            sessionData.outputBuffer += `\n\n[Program finished with exit code ${code}]`;
+        childProcess.on('close', async (code) => {            clearTimeout(processTimeout);            sessionData.outputBuffer += `\n\n[Program finished with exit code ${code}]`;
             sessionData.waitingForInput = false;
             
             // Cleanup after a delay
@@ -214,16 +268,28 @@ app.post('/api/execute/input', (req, res) => {
     
     const sessionData = activeProcesses.get(sessionId);
     if (!sessionData) {
-        return res.status(404).json({ error: 'Session not found' });
+        return res.status(404).json({ error: 'Session not found or expired' });
     }
 
     const { process } = sessionData;
+    
+    // Update activity timestamp
+    sessionData.lastActivityAt = Date.now();
+    
+    // Check if process is still alive
+    if (process.killed) {
+        return res.status(410).json({ error: 'Process has terminated' });
+    }
     
     // Clear output buffer before sending input
     sessionData.outputBuffer = '';
     
     // Send input to process
-    process.stdin.write(input + '\n');
+    try {
+        process.stdin.write(input + '\n');
+    } catch (error) {
+        return res.status(500).json({ error: 'Failed to send input: ' + error.message });
+    }
     
     // Small delay to capture output
     setTimeout(() => {
