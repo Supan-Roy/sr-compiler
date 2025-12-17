@@ -169,6 +169,33 @@ export const startInteractiveRun = async (code: string, language: string, stdin:
             }),
         });
 
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        
+        let output = '';
+        if (result.compile && result.compile.stderr) {
+            output += 'Compilation Error:\n' + result.compile.stderr + '\n';
+        }
+        if (result.run) {
+            if (result.run.stderr) output += result.run.stderr;
+            if (result.run.stdout) output += result.run.stdout;
+        }
+        
+        return { 
+            chat: sessionId, 
+            responseText: output || 'No output',
+            waitingForInput: false
+        };
+    } catch (error) {
+        console.error("Error starting interactive run:", error);
+        throw new Error(`Execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+};
+
+export const continueInteractiveRun = async (sessionId: string, userInput: string): Promise<{ output: string; waitingForInput: boolean; }> => {
     const hasLocalServer = await checkLocalServer();
     
     // Use local server for TRUE interactive continuation
@@ -192,19 +219,14 @@ export const startInteractiveRun = async (code: string, language: string, stdin:
         }
     }
     
-    // Piston doesn't support interactive continuationstatus: ${response.status}`);
-        }
+    // Piston doesn't support interactive continuation
+    return {
+        output: '',
+        waitingForInput: false
+    };
+};
 
-        const result = await response.json();
-        
-        let output = '';
-        if (result.compile && result.compile.stderr) {
-            output += 'Compilation Error:\n' + result.compile.stderr + '\n';
-        }
-        if (result.run) {
-            if (result.run.stderr) output += result.run.stderr;
-            if (result.run.stdout) output += result.run.stdout;
-        }
+export const killInteractiveSession = async (sessionId: string): Promise<void> => {
     const hasLocalServer = await checkLocalServer();
     
     if (hasLocalServer) {
@@ -219,28 +241,6 @@ export const startInteractiveRun = async (code: string, language: string, stdin:
         }
     }
     
-        
-        return { 
-            chat: sessionId, 
-            responseText: output || 'No output',
-            waitingForInput: false
-        };
-    } catch (error) {
-        console.error("Error starting interactive run:", error);
-        throw new Error(`Execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-};
-
-export const continueInteractiveRun = async (sessionId: string, userInput: string): Promise<{ output: string; waitingForInput: boolean; }> => {
-    // Piston API doesn't support interactive continuation
-    // All input must be provided upfront
-    return {
-        output: '',
-        waitingForInput: false
-    };
-};
-
-export const killInteractiveSession = async (sessionId: string): Promise<void> => {
     if (currentSessionId === sessionId) {
         currentSessionId = null;
     }
