@@ -5,17 +5,6 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
-import { createRequire } from 'module';
-
-// Optional PTY for robust interactive I/O (Linux PaaS like Railway)
-const require = createRequire(import.meta.url);
-let pty = null;
-try {
-    pty = require('node-pty');
-    console.log('node-pty loaded for interactive sessions');
-} catch (e) {
-    console.warn('node-pty not available, falling back to stdio pipes');
-}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -212,28 +201,14 @@ app.post('/api/execute/start', async (req, res) => {
         }
 
         // Start the process for interactive session
-        let childProcess;
-        let isPty = false;
-        if (pty) {
-            isPty = true;
-            childProcess = pty.spawn(runConfig.command, runConfig.args, {
-                name: 'xterm-color',
-                cols: 120,
-                rows: 30,
-                cwd: sessionDir,
-                env: process.env
-            });
-        } else {
-            childProcess = spawn(runConfig.command, runConfig.args, {
-                cwd: sessionDir,
-                stdio: ['pipe', 'pipe', 'pipe'],
-                shell: process.platform !== 'win32'
-            });
-        }
+        const childProcess = spawn(runConfig.command, runConfig.args, {
+            cwd: sessionDir,
+            stdio: ['pipe', 'pipe', 'pipe'],
+            shell: process.platform !== 'win32'
+        });
 
         const sessionData = {
             process: childProcess,
-            isPty,
             sessionDir,
             outputBuffer: '',
             // assume program will request input unless it exits
@@ -264,7 +239,6 @@ app.post('/api/execute/start', async (req, res) => {
             childProcess.stderr.on('data', (data) => {
                 sessionData.outputBuffer += data.toString();
             });
-        }
 
         childProcess.stdin.on('error', (err) => {
             console.warn(`[${sessionId}] stdin error:`, err.message);
@@ -292,11 +266,7 @@ app.post('/api/execute/start', async (req, res) => {
                 }
             }, 5000);
         };
-        if (isPty) {
-            childProcess.onExit(({ exitCode }) => handleExit(exitCode));
-        } else {
-            childProcess.on('close', handleExit);
-        }
+        childProcess.on('close', handleExit);
 
         // Small delay to capture initial output
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -323,7 +293,7 @@ app.post('/api/execute/input', (req, res) => {
         return res.status(404).json({ error: 'Session not found or expired' });
     }
 
-    const { process, isPty } = sessionData;
+    const { process } = sessionData;
     
     // Update activity timestamp
     sessionData.lastActivityAt = Date.now();
@@ -339,11 +309,7 @@ app.post('/api/execute/input', (req, res) => {
     // Send input to process
     try {
         console.log(`[${sessionId}] stdin ->`, JSON.stringify(input));
-        if (isPty) {
-            process.write((input ?? '') + '\r');
-        } else {
-            process.stdin.write((input ?? '') + '\n');
-        }
+        process.stdin.write((input ?? '') + '\n');
     } catch (error) {
         console.error(`[${sessionId}] Failed to send input:`, error.message);
         return res.status(500).json({ error: 'Failed to send input: ' + error.message });
