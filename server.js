@@ -209,7 +209,8 @@ app.post('/api/execute/start', async (req, res) => {
             process: childProcess,
             sessionDir,
             outputBuffer: '',
-            waitingForInput: false,
+            // assume program will request input unless it exits
+            waitingForInput: true,
             createdAt: Date.now(),
             lastActivityAt: Date.now()
         };
@@ -250,6 +251,7 @@ app.post('/api/execute/start', async (req, res) => {
         // Small delay to capture initial output
         await new Promise(resolve => setTimeout(resolve, 100));
 
+        console.log(`[${sessionId}] session started for ${language}`);
         res.json({
             sessionId,
             output: sessionData.outputBuffer,
@@ -286,7 +288,8 @@ app.post('/api/execute/input', (req, res) => {
     
     // Send input to process
     try {
-        process.stdin.write(input + '\n');
+        console.log(`[${sessionId}] stdin ->`, JSON.stringify(input));
+        process.stdin.write((input ?? '') + '\n');
     } catch (error) {
         return res.status(500).json({ error: 'Failed to send input: ' + error.message });
     }
@@ -295,7 +298,8 @@ app.post('/api/execute/input', (req, res) => {
     setTimeout(() => {
         res.json({
             output: sessionData.outputBuffer,
-            waitingForInput: !process.killed && sessionData.waitingForInput !== false
+            // Consider we are waiting for input until the process exits
+            waitingForInput: !process.killed
         });
     }, 100);
 });
@@ -425,13 +429,11 @@ app.post('/api/execute/once', async (req, res) => {
             stderr += data.toString();
         });
 
-        // Send stdin if provided
-        if (stdin) {
+        // Send stdin if provided (allow "0" and empty strings)
+        if (typeof stdin === 'string') {
             childProcess.stdin.write(stdin);
-            childProcess.stdin.end();
-        } else {
-            childProcess.stdin.end();
         }
+        childProcess.stdin.end();
 
         await new Promise((resolve) => {
             childProcess.on('close', resolve);

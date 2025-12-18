@@ -1,8 +1,14 @@
 import { LANGUAGES } from "../constants";
 import prettier from "prettier";
 
-// Use environment variable for server URL, fallback to localhost for development
-const SERVER_URL = import.meta.env.VITE_EXECUTION_SERVER_URL || 'http://localhost:3001';
+// Use environment variable for server URL.
+// Fallback: on non-localhost deployments, default to your Railway server.
+// On localhost, default to local server for dev.
+const SERVER_URL =
+    import.meta.env.VITE_EXECUTION_SERVER_URL ||
+    ((typeof window !== 'undefined' && window.location.hostname !== 'localhost')
+        ? 'https://sr-compiler-production.up.railway.app'
+        : 'http://localhost:3001');
 const EXECUTION_API = `${SERVER_URL}/api`;
 const PISTON_API = 'https://emkc.org/api/v2/piston';
 
