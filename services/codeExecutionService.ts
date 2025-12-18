@@ -56,24 +56,20 @@ const languageMap: Record<string, { language: string; version: string }> = {
 };
 
 export const runCodeOnce = async (code: string, language: string, input: string): Promise<string> => {
-    const hasLocalServer = await checkLocalServer();
-    
-    // Try execution server first for better experience
-    if (hasLocalServer) {
-        try {
-            const response = await fetch(`${EXECUTION_API}/execute/once`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code, language, stdin: input }),
-            });
+    // Always try execution server first; fallback to Piston on any failure
+    try {
+        const response = await fetch(`${EXECUTION_API}/execute/once`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code, language, stdin: input }),
+        });
 
-            if (response.ok) {
-                const result = await response.json();
-                return result.stdout || '';
-            }
-        } catch (error) {
-            console.warn("Local server failed, using Piston");
+        if (response.ok) {
+            const result = await response.json();
+            return result.stdout || '';
         }
+    } catch (error) {
+        console.warn("Execution server not reachable, using Piston");
     }
     
     // Fallback to Piston API
@@ -123,30 +119,26 @@ export const runCodeOnce = async (code: string, language: string, input: string)
 }
 
 export const startInteractiveRun = async (code: string, language: string, stdin: string = ''): Promise<{ chat: string; responseText: string; waitingForInput: boolean; }> => {
-    const hasLocalServer = await checkLocalServer();
-    
-    // Use execution server for TRUE interactive (like VS Code)
-    if (hasLocalServer) {
-        try {
-            const response = await fetch(`${EXECUTION_API}/execute/start`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code, language }),
-            });
+    // Try execution server for TRUE interactive first
+    try {
+        const response = await fetch(`${EXECUTION_API}/execute/start`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code, language }),
+        });
 
-            if (response.ok) {
-                const result = await response.json();
-                currentSessionId = result.sessionId;
-                
-                return { 
-                    chat: result.sessionId, 
-                    responseText: result.output,
-                    waitingForInput: result.waitingForInput ?? false
-                };
-            }
-        } catch (error) {
-            console.warn("Local server failed, using Piston");
+        if (response.ok) {
+            const result = await response.json();
+            currentSessionId = result.sessionId;
+            
+            return { 
+                chat: result.sessionId, 
+                responseText: result.output,
+                waitingForInput: result.waitingForInput ?? false
+            };
         }
+    } catch (error) {
+        console.warn("Execution server not reachable, falling back to Piston");
     }
     
     // Fallback to Piston (requires input upfront)
@@ -203,42 +195,35 @@ export const startInteractiveRun = async (code: string, language: string, stdin:
 };
 
 export const continueInteractiveRun = async (sessionId: string, userInput: string): Promise<{ output: string; waitingForInput: boolean; }> => {
-    const hasLocalServer = await checkLocalServer();
-    
-    // Use execution server for TRUE interactive continuation
-    if (hasLocalServer) {
-        try {
-            const response = await fetch(`${EXECUTION_API}/execute/input`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sessionId, input: userInput }),
-            });
+    // Always attempt execution server; error if not available
+    try {
+        const response = await fetch(`${EXECUTION_API}/execute/input`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId, input: userInput }),
+        });
 
-            if (response.status === 404 || response.status === 410) {
-                throw new Error('Session expired or process terminated. Please run your code again.');
-            }
-
-            if (response.status === 429) {
-                throw new Error('Server is busy. Please try again later.');
-            }
-
-            if (response.ok) {
-                const result = await response.json();
-                return {
-                    output: result.output,
-                    waitingForInput: result.waitingForInput ?? false
-                };
-            }
-
-            throw new Error(`Server error: ${response.status}`);
-        } catch (error) {
-            console.error("Error continuing interactive run:", error);
-            throw error instanceof Error ? error : new Error('Failed to send input');
+        if (response.status === 404 || response.status === 410) {
+            throw new Error('Session expired or process terminated. Please run your code again.');
         }
+
+        if (response.status === 429) {
+            throw new Error('Server is busy. Please try again later.');
+        }
+
+        if (response.ok) {
+            const result = await response.json();
+            return {
+                output: result.output,
+                waitingForInput: result.waitingForInput ?? false
+            };
+        }
+
+        throw new Error(`Server error: ${response.status}`);
+    } catch (error) {
+        console.error("Error continuing interactive run:", error);
+        throw error instanceof Error ? error : new Error('Failed to send input');
     }
-    
-    // Piston doesn't support interactive continuation
-    throw new Error('Local server unavailable. Please ensure the execution server is running.');
 };
 
 export const killInteractiveSession = async (sessionId: string): Promise<void> => {
