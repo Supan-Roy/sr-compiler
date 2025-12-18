@@ -203,7 +203,9 @@ app.post('/api/execute/start', async (req, res) => {
         // Start the process with explicit pipes for interactive I/O
         const childProcess = spawn(runConfig.command, runConfig.args, {
             cwd: sessionDir,
-            stdio: ['pipe', 'pipe', 'pipe']
+            stdio: ['pipe', 'pipe', 'pipe'],
+            // On Linux (Railway), run via shell to avoid immediate EOF edge cases
+            shell: process.platform !== 'win32'
         });
 
         const sessionData = {
@@ -233,6 +235,19 @@ app.post('/api/execute/start', async (req, res) => {
 
         childProcess.stderr.on('data', (data) => {
             sessionData.outputBuffer += data.toString();
+        });
+
+        childProcess.stdin.on('error', (err) => {
+            console.warn(`[${sessionId}] stdin error:`, err.message);
+        });
+        childProcess.stdin.on('close', () => {
+            console.warn(`[${sessionId}] stdin closed`);
+        });
+        childProcess.stdout.on('close', () => {
+            console.warn(`[${sessionId}] stdout closed`);
+        });
+        childProcess.stderr.on('close', () => {
+            console.warn(`[${sessionId}] stderr closed`);
         });
 
         childProcess.on('close', async (code) => {            clearTimeout(processTimeout);            sessionData.outputBuffer += `\n\n[Program finished with exit code ${code}]`;
@@ -419,7 +434,8 @@ app.post('/api/execute/once', async (req, res) => {
         // Run the process with explicit pipes for stdin handling
         const childProcess = spawn(runConfig.command, runConfig.args, {
             cwd: sessionDir,
-            stdio: ['pipe', 'pipe', 'pipe']
+            stdio: ['pipe', 'pipe', 'pipe'],
+            shell: process.platform !== 'win32'
         });
 
         let stdout = '';
