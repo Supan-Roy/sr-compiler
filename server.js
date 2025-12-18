@@ -296,7 +296,7 @@ app.post('/api/execute/input', (req, res) => {
         return res.status(500).json({ error: 'Failed to send input: ' + error.message });
     }
     
-    // Wait longer for output (200ms instead of 100ms)
+    // Wait for output with extended timeout (1000ms for slow responses)
     setTimeout(() => {
         console.log(`[${sessionId}] output captured:`, JSON.stringify(sessionData.outputBuffer.substring(0, 100)));
         res.json({
@@ -304,7 +304,7 @@ app.post('/api/execute/input', (req, res) => {
             // Consider we are waiting for input until the process exits
             waitingForInput: !process.killed
         });
-    }, 200);
+    }, 1000);
 });
 
 // Get session output
