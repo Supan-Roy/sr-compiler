@@ -200,9 +200,10 @@ app.post('/api/execute/start', async (req, res) => {
             runConfig = config.run(sourceFile);
         }
 
-        // Start the process
+        // Start the process with explicit pipes for interactive I/O
         const childProcess = spawn(runConfig.command, runConfig.args, {
-            cwd: sessionDir
+            cwd: sessionDir,
+            stdio: ['pipe', 'pipe', 'pipe']
         });
 
         const sessionData = {
@@ -413,9 +414,10 @@ app.post('/api/execute/once', async (req, res) => {
             runConfig = config.run(sourceFile);
         }
 
-        // Run the process
+        // Run the process with explicit pipes for stdin handling
         const childProcess = spawn(runConfig.command, runConfig.args, {
-            cwd: sessionDir
+            cwd: sessionDir,
+            stdio: ['pipe', 'pipe', 'pipe']
         });
 
         let stdout = '';
