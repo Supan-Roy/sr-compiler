@@ -292,17 +292,19 @@ app.post('/api/execute/input', (req, res) => {
         console.log(`[${sessionId}] stdin ->`, JSON.stringify(input));
         process.stdin.write((input ?? '') + '\n');
     } catch (error) {
+        console.error(`[${sessionId}] Failed to send input:`, error.message);
         return res.status(500).json({ error: 'Failed to send input: ' + error.message });
     }
     
-    // Small delay to capture output
+    // Wait longer for output (200ms instead of 100ms)
     setTimeout(() => {
+        console.log(`[${sessionId}] output captured:`, JSON.stringify(sessionData.outputBuffer.substring(0, 100)));
         res.json({
             output: sessionData.outputBuffer,
             // Consider we are waiting for input until the process exits
             waitingForInput: !process.killed
         });
-    }, 100);
+    }, 200);
 });
 
 // Get session output
