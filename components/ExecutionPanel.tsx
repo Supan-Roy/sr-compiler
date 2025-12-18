@@ -1,6 +1,5 @@
 import React from 'react';
 import type { ExecutionMode } from '../types';
-import { InteractiveConsole } from './InteractiveConsole';
 import { InputConsole } from './InputConsole';
 import { OutputConsole } from './OutputConsole';
 import { ExpectedOutputConsole } from './ExpectedOutputConsole';
@@ -38,22 +37,12 @@ export const ExecutionPanel: React.FC<ExecutionPanelProps> = (props) => {
                     onChange={(e) => props.onModeChange(e.target.value as ExecutionMode)}
                     className="bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 text-slate-800 dark:text-slate-200"
                 >
-                    <option value="interactive">Terminal</option>
                     <option value="manual">Manual Input</option>
                     <option value="competitive">Competitive Companion</option>
                 </select>
             </div>
             
-            {props.mode === 'interactive' ? (
-                <InteractiveConsole 
-                    history={props.history}
-                    isWaitingForInput={props.isWaitingForInput}
-                    onUserInput={props.onUserInput}
-                    onClear={props.onClearTerminal}
-                    isError={props.isError}
-                    fontSize={props.fontSize}
-                />
-            ) : props.mode === 'manual' ? (
+            {props.mode === 'manual' ? (
                 <div className="flex flex-col gap-4 flex-grow min-h-0">
                    <div className="h-3/5 flex flex-col min-h-0">
                         <InputConsole 

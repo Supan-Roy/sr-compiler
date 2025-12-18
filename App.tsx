@@ -8,7 +8,7 @@ import { Toast } from './components/Toast';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { PromptDialog } from './components/PromptDialog';
 import { Icon } from './components/Icon';
-import { formatCode, startInteractiveRun, continueInteractiveRun, runCodeOnce, killInteractiveSession } from './services/codeExecutionService';
+import { formatCode, runCodeOnce } from './services/codeExecutionService';
 import { LANGUAGES, CODE_TEMPLATES } from './constants';
 import type { Language, ExecutionMode, Theme } from './types';
 
@@ -152,7 +152,7 @@ const App: React.FC = () => {
   const [isFormatLoading, setIsFormatLoading] = useState<boolean>(false);
   const [isError, setIsError] = useState<boolean>(false);
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
-  const [executionMode, setExecutionMode] = useState<ExecutionMode>('interactive');
+  const [executionMode, setExecutionMode] = useState<ExecutionMode>('manual');
   const [activeMobileView, setActiveMobileView] = useState<'editor' | 'output'>('editor');
   
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -199,24 +199,6 @@ const App: React.FC = () => {
 
 
   // --- Core Handlers ---
-  const processInteractiveResponse = (responseText: string, waitingForInput: boolean) => {
-    const output = responseText;
-    
-    if (output) {
-      setHistory(prev => [...prev, { type: 'stdout', content: output }]);
-    }
-    
-    // Check if program has finished
-    const programFinished = output.includes('[Program finished');
-    
-    if (programFinished) {
-      setIsWaitingForInput(false);
-      setChat(null);
-    } else {
-      setIsWaitingForInput(waitingForInput);
-    }
-  };
-
   const handleLanguageChange = useCallback((lang: Language) => {
     setSelectedLanguage(lang);
     setCode(getInitialCode(lang));
@@ -246,23 +228,7 @@ const App: React.FC = () => {
     setIsWaitingForInput(false);
     setChat(null);
 
-    if (executionMode === 'interactive') {
-      try {
-        // Show hint if input is provided
-        if (manualInput.trim()) {
-          setHistory([{ type: 'stdout', content: `[Using input from Input Console]\n` }]);
-        }
-        const { chat: newChat, responseText, waitingForInput } = await startInteractiveRun(code, selectedLanguage.name, manualInput);
-        setChat(newChat);
-        processInteractiveResponse(responseText, waitingForInput);
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
-        setHistory([{ type: 'stdout', content: `Error: ${errorMessage}` }]);
-        setIsError(true);
-      } finally {
-        setIsRunLoading(false);
-      }
-    } else if (executionMode === 'manual') {
+    if (executionMode === 'manual') {
        try {
         const result = await runCodeOnce(code, selectedLanguage.name, manualInput);
         setManualOutput(result);
@@ -298,24 +264,6 @@ const App: React.FC = () => {
     }
   }, [code, selectedLanguage, executionMode, manualInput, expectedOutput]);
 
-  const handleUserInput = useCallback(async (userInput: string) => {
-    if (!chat || !userInput.trim()) return;
-    setHistory(prev => [...prev, { type: 'stdin', content: userInput }]);
-    setIsWaitingForInput(false);
-    setIsRunLoading(true);
-
-    try {
-        const { output, waitingForInput } = await continueInteractiveRun(chat, userInput);
-        processInteractiveResponse(output, waitingForInput);
-    } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
-        setHistory(prev => [...prev, { type: 'stdout', content: `Error: ${errorMessage}` }]);
-        setIsError(true);
-    } finally {
-        setIsRunLoading(false);
-    }
-  }, [chat]);
-
   const handleFormatCode = useCallback(async () => {
     if (!code.trim()) return;
     setIsFormatLoading(true);
@@ -345,17 +293,14 @@ const App: React.FC = () => {
     setShowClearConfirm(false);
   }, [selectedLanguage]);
 
-  const handleClearTerminal = useCallback(async () => {
-    if (chat) {
-      await killInteractiveSession(chat);
-    }
+  const handleClearTerminal = useCallback(() => {
     setHistory([]);
     setChat(null);
     setIsWaitingForInput(false);
     setIsRunLoading(false);
     setIsError(false);
     setIsSuccess(false);
-  }, [chat]);
+  }, []);
 
   const handleDownloadCode = () => {
     const blob = new Blob([code], { type: 'text/plain;charset=utf-8' });
@@ -423,8 +368,8 @@ const App: React.FC = () => {
             mode={executionMode}
             onModeChange={setExecutionMode}
             history={history}
-            isWaitingForInput={isWaitingForInput}
-            onUserInput={handleUserInput}
+            isWaitingForInput={false}
+            onUserInput={() => {}}
             onClearTerminal={handleClearTerminal}
             input={manualInput}
             onInputChange={setManualInput}
@@ -446,7 +391,7 @@ const App: React.FC = () => {
            <CodeEditor code={code} onCodeChange={setCode} languageName={selectedLanguage.name} languageId={selectedLanguage.id} fontSize={fontSize} onFormatCode={handleFormatCode} isFormatLoading={isFormatLoading} showToast={showToast} onReplaceAll={handleReplaceAll} />
          </div>
          <div className={`flex-1 flex-col min-h-0 ${activeMobileView === 'output' ? 'flex' : 'hidden'}`}>
-           <ExecutionPanel mode={executionMode} onModeChange={setExecutionMode} history={history} isWaitingForInput={isWaitingForInput} onUserInput={handleUserInput} onClearTerminal={handleClearTerminal} input={manualInput} onInputChange={setManualInput} output={manualOutput} expectedOutput={expectedOutput} onExpectedOutputChange={setExpectedOutput} verdict={verdict} isLoading={isRunLoading} isError={isError} isSuccess={isSuccess} fontSize={fontSize} />
+           <ExecutionPanel mode={executionMode} onModeChange={setExecutionMode} history={history} isWaitingForInput={false} onUserInput={() => {}} onClearTerminal={handleClearTerminal} input={manualInput} onInputChange={setManualInput} output={manualOutput} expectedOutput={expectedOutput} onExpectedOutputChange={setExpectedOutput} verdict={verdict} isLoading={isRunLoading} isError={isError} isSuccess={isSuccess} fontSize={fontSize} />
          </div>
       </main>
 
