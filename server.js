@@ -304,7 +304,7 @@ app.post('/api/execute/input', (req, res) => {
             // Consider we are waiting for input until the process exits
             waitingForInput: !process.killed
         });
-    }, 1000);
+    }, 10000);
 });
 
 // Get session output
